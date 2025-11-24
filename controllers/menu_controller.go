@@ -73,8 +73,12 @@ func ListMenu(c *gin.Context) {
 	page := 1
 	perPage := 10
 	if err := c.ShouldBindQuery(&params); err == nil {
-		page = params.Page
-		perPage = params.PerPage
+		if params.Page > 0 {
+			page = params.Page
+		}
+		if params.PerPage > 0 {
+			perPage = params.PerPage
+		}
 	}
 
 	offset := (page - 1) * perPage
@@ -84,10 +88,10 @@ func ListMenu(c *gin.Context) {
 	//menerapkan sorting
 	if params.Sort == "price:asc" {
 		query = query.Order("price asc")
-	} else if params.Sort == "price:dsc" {
-		query = query.Order("price dsc")
+	} else if params.Sort == "price:desc" {
+		query = query.Order("price desc")
 	} else {
-		query = query.Order("created_at dsc")
+		query = query.Order("created_at desc")
 	}
 
 	//EKSEKUSI QUERY
@@ -100,10 +104,89 @@ func ListMenu(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data": menus,
 		"pagination": gin.H{
-			"total": jumlah,
-			"page": page,
-			"per_page" : perPage,
-			"total_pages": (jumlah + int64(perPage) - 1)/int64(perPage),
+			"total":       jumlah,
+			"page":        page,
+			"per_page":    perPage,
+			"total_pages": (jumlah + int64(perPage) - 1) / int64(perPage),
 		},
 	})
+}
+
+func GetMenuByID(c *gin.Context) {
+	id := c.Param("id")
+	var menu models.Menu
+
+	if err := config.DB.First(&menu, id).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"errpr": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": menu})
+}
+
+func UpdateMenuByID(c *gin.Context) {
+	id := c.Param("id")
+	var menu models.Menu
+	if err := config.DB.First(&menu, id).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var inputData models.Menu
+	if err := c.ShouldBindJSON(&inputData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	config.DB.Model(&menu).Updates(inputData)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Success",
+		"data":    menu,
+	})
+}
+
+func DeleteMenuByID(c *gin.Context) {
+	id := c.Param("id")
+	var menu models.Menu
+	if err := config.DB.First(&menu, id).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	config.DB.Delete(&menu)
+	c.JSON(http.StatusOK, gin.H{"message": "Success"})
+}
+
+func GroupByCategory(c *gin.Context) {
+	var menus models.Menu
+	mode := c.Query("mode")
+
+	type CategoryCount struct {
+		Category string
+		Total    int64
+	}
+	var categoryMenu []CategoryCount
+
+	switch mode {
+	case "count":
+		result := make(map[string]int64)
+		config.DB.Model(&menus).Select("category, count(*) as total").Group("category").Scan(&categoryMenu)
+		for _, item := range categoryMenu {
+			result[item.Category] = item.Total
+		}
+		c.JSON(http.StatusOK, gin.H{"data": result})
+	case "list":
+		//ambil semua kategori unik terlebih dahulu
+		var listCategories []struct{
+			Category string
+		}
+		config.DB.Model(&menus).Distinct("category").Group("category").Scan(&listCategories)
+		results := make(map[string][]models.Menu)
+		//lakukan looping setiap kategori
+		for _, item := range listCategories{
+			data := config.DB.Model(&models.Menu{}).Where("category = ?", item.Category)
+			results[item.Category] = data
+		}
+		//di dalam loop query ke database, limit sesuaikan dengan requestnya
+		//masukkan query ke map
+	}
 }

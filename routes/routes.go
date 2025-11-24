@@ -11,6 +11,10 @@ func SetupRoutes() *gin.Engine{
 	r := gin.Default()
 	r.POST("/menu", controllers.CreateMenu)
 	r.GET("/menu", controllers.ListMenu)
-
+	r.GET("/menu/:id", controllers.GetMenuByID)
+	r.PUT("/menu/:id", controllers.UpdateMenuByID)
+	r.DELETE("/menu/:id", controllers.DeleteMenuByID)
+	r.GET("/menu/group-by-category", controllers.GroupByCategory)
+	
 	return r
 }
