@@ -2,7 +2,7 @@ package controllers
 
 import (
 	"net/http"
-
+	"strconv"
 	"github.com/BimoAtaullahR/penugasan-gdgoc/config"
 	"github.com/BimoAtaullahR/penugasan-gdgoc/models"
 	"github.com/gin-gonic/gin"
@@ -117,7 +117,7 @@ func GetMenuByID(c *gin.Context) {
 	var menu models.Menu
 
 	if err := config.DB.First(&menu, id).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"errpr": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -174,19 +174,87 @@ func GroupByCategory(c *gin.Context) {
 			result[item.Category] = item.Total
 		}
 		c.JSON(http.StatusOK, gin.H{"data": result})
+
 	case "list":
-		//ambil semua kategori unik terlebih dahulu
 		var listCategories []struct{
 			Category string
 		}
+		type MenuResponseSimple struct{
+			ID uint `json:"id"`
+			Name string `json:"name"`
+			Category string `json:"category"`
+			Price float64 `json:"price"`
+		}
 		config.DB.Model(&menus).Distinct("category").Group("category").Scan(&listCategories)
-		results := make(map[string][]models.Menu)
-		//lakukan looping setiap kategori
+
+		results := make(map[string][]MenuResponseSimple)
+		perPage := c.DefaultQuery("per_category", "5")
+		limitPerPage, err := strconv.Atoi(perPage)
+		if err != nil{limitPerPage = 5}
+		
 		for _, item := range listCategories{
-			data := config.DB.Model(&models.Menu{}).Where("category = ?", item.Category)
+			var data []MenuResponseSimple
+			config.DB.Model(&models.Menu{}).Where("category = ?", item.Category).Limit(limitPerPage).Find(&data)
 			results[item.Category] = data
 		}
-		//di dalam loop query ke database, limit sesuaikan dengan requestnya
-		//masukkan query ke map
+		
+		c.JSON(http.StatusOK, gin.H{"data": results})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Mode tidak valid. Gunakan ?mode=count atau ?mode=list"})
 	}
 }
+
+
+func SearchByText(c * gin.Context){
+	query := config.DB.Model(&models.Menu{})
+
+	if q := c.Query("q"); q != ""{
+		query = query.Where("name LIKE ? OR category LIKE ?", "%"+q+"%", "%"+q+"%")
+	}
+	var jumlah int64
+	query.Count(&jumlah)
+
+	type QueryParams struct{
+		Page int `form:"page, default=1"`
+		PerPage int `form:"per_page, default=5"`
+	}
+	var params QueryParams
+	page := 1
+	perPage := 5
+	if err := c.ShouldBindQuery(&params); err == nil{
+		if params.Page > 0 {page = params.Page}
+		if params.PerPage > 0 {perPage = params.PerPage}
+	}
+	offset := (page - 1)*perPage
+	query = query.Limit(perPage).Offset(offset)
+
+	type Response struct{
+		ID uint `gorm:"primaryKey" json:"id"`
+		Name string `json:"name" binding:"required"`
+		Category string `json:"category" binding:"required"`
+		Price float64 `json:"price" binding:"required"`
+		Calories float64 `json:"calories"`
+		Ingredients []string `json:"ingredients" gorm:"type:text;serializer:json"`
+		Description string `json:"description"`
+	}
+	var results []Response
+	query.Find(&results)
+
+	c.JSON(http.StatusOK, gin.H{
+		"data" : results,
+		"pagination": gin.H{
+			"total": jumlah,
+			"page": page,
+			"per_page": perPage,
+		},
+	})
+}
+/* 
+	steps untuk membuat endpoint pencarian nama atau kategori yang sesuai/mirip:
+	1. membuat query dan mendapatkan semua database menu
+	2. meng query data dengan filter dimana nama nya terdapat karakter sesuai dengan query parameter request atau kategori yang sesuai dengan query parameternya juga
+	3. hitung total query yang didapatkan
+	4. terapkan offset dan limit berdasarkan request
+	5. kembalikan 7 properti data data yang sesuai dengan filter pencarian dan berikan data pagination
+
+*/
