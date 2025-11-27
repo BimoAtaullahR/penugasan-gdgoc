@@ -3,8 +3,10 @@ package controllers
 import (
 	"net/http"
 	"strconv"
+
 	"github.com/BimoAtaullahR/penugasan-gdgoc/config"
 	"github.com/BimoAtaullahR/penugasan-gdgoc/models"
+	"github.com/BimoAtaullahR/penugasan-gdgoc/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,6 +19,12 @@ func CreateMenu(c *gin.Context) {
 		return
 	}
 
+	if menu.Description == ""{
+		desc, err := services.GenerateDescription(c, menu.Name, menu.Ingredients)
+		if err==nil{
+			menu.Description = desc
+		}
+	}
 	//simpan ke database
 	if err := config.DB.Create(&menu).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -249,12 +257,3 @@ func SearchByText(c * gin.Context){
 		},
 	})
 }
-/* 
-	steps untuk membuat endpoint pencarian nama atau kategori yang sesuai/mirip:
-	1. membuat query dan mendapatkan semua database menu
-	2. meng query data dengan filter dimana nama nya terdapat karakter sesuai dengan query parameter request atau kategori yang sesuai dengan query parameternya juga
-	3. hitung total query yang didapatkan
-	4. terapkan offset dan limit berdasarkan request
-	5. kembalikan 7 properti data data yang sesuai dengan filter pencarian dan berikan data pagination
-
-*/
