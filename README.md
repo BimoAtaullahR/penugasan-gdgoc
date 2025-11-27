@@ -1,4 +1,4 @@
-# Menu Catalog API (GDGOC Hackathon Backend)
+# Menu Catalog API (GDGOC Backend)
 
 RESTful API backend untuk manajemen katalog menu restoran yang modern, skalabel, dan terintegrasi dengan Google Gemini AI. Proyek ini dibangun untuk memenuhi penugasan seleksi GDGOC UGM Divisi Hacker.
 
